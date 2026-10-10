@@ -198,6 +198,10 @@ app.get('/health', async (req, res) => {
   });
 });
 
+app.get('/health/live', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
 app.get('/api/categories', async (req, res) => {
   const data = databaseConfigured ? await listCategories() : categories;
   res.json({ success: true, data });

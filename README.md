@@ -49,6 +49,15 @@ The AI route requires both PostgreSQL and `GEMINI_API_KEY`. Gemini first extract
 - Set `VITE_API_BASE_URL` to the public backend origin in the Vercel build environment; leave it blank for local Vite proxying. Build the frontend with `npm run build`.
 - Never use the development seed on production data. No database credentials or third-party API secrets belong in the frontend environment.
 
+## Container and Kubernetes validation
+
+- Build the application image locally with `docker build -t buo:local .`.
+- Run locally only after configuring the server environment: `docker run --rm -p 5000:5000 --env-file .env buo:local`.
+- The image runs the Express API as a non-root user. `.dockerignore` excludes `.env` files from the image build context.
+- `k8s/deployment.yaml` contains the application Deployment and ClusterIP Service. Create the `buo-secrets` Kubernetes Secret out of band with `database-url` and `jwt-secret`; add `gemini-api-key` to enable Gemini. Do not commit secret values.
+- The Kubernetes image reference is a placeholder until BUO publishes an image to a registry. The GitHub Actions workflow currently checks lint/build, builds the image without publishing it, and validates the Kubernetes manifests; it does not deploy to a cluster.
+- Every push or pull request targeting `main` runs `.github/workflows/ci.yml`. A successful run should show lint/build, Docker image build, and Kubernetes schema validation.
+
 ## Checks
 
 - `npm.cmd run lint`
