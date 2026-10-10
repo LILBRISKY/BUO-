@@ -30,6 +30,8 @@ const formatRating = (value) => Number(value || 0).toFixed(1)
 function App() {
   const [categories, setCategories] = useState(['All'])
   const [catalog, setCatalog] = useState([])
+  const [catalogLoading, setCatalogLoading] = useState(true)
+  const [catalogError, setCatalogError] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedProduct, setSelectedProduct] = useState(null)
@@ -101,12 +103,18 @@ function App() {
       if (selectedCategory !== 'All') params.set('category', selectedCategory)
       params.set('limit', '12')
 
+      setCatalogLoading(true)
+      setCatalogError('')
       try {
         const res = await fetch(apiUrl(`/api/products?${params.toString()}`))
+        if (!res.ok) throw new Error('The product catalog is temporarily unavailable.')
         const data = await res.json()
         setCatalog(data?.data || [])
-      } catch {
+      } catch (error) {
         setCatalog([])
+        setCatalogError(error.message || 'The product catalog is temporarily unavailable.')
+      } finally {
+        setCatalogLoading(false)
       }
     }
 
@@ -416,125 +424,139 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#fffaf2] text-slate-900">
-      <header className="sticky top-0 z-40 border-b border-amber-100 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-yellow-400 to-amber-500 font-black text-white shadow-lg shadow-amber-200">
+    <div className="min-h-screen bg-zinc-50 text-zinc-950">
+      <header className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+          <a href="#" className="flex shrink-0 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-lg font-black text-white shadow-lg shadow-indigo-600/20">
               B
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-500">BUO</p>
-              <p className="text-sm text-slate-600">Nigerian marketplace</p>
+              <p className="text-sm font-bold tracking-tight text-zinc-950">BUO</p>
+              <p className="text-xs text-zinc-500">Nigerian marketplace</p>
             </div>
-          </div>
+          </a>
 
-          <nav className="hidden items-center gap-8 text-sm font-medium text-slate-700 lg:flex">
-            <a href="#shop" className="transition hover:text-amber-600">Shop</a>
-            <a href="#deals" className="transition hover:text-amber-600">Deals</a>
-            <a href="#ai" className="transition hover:text-amber-600">AI shopping</a>
-            <a href="#orders" className="transition hover:text-amber-600">Orders</a>
+          <nav className="hidden items-center gap-7 text-sm font-medium text-zinc-600 lg:flex">
+            <a href="#shop" className="transition-colors hover:text-indigo-600">Shop</a>
+            <a href="#deals" className="transition-colors hover:text-indigo-600">Why BUO</a>
+            <a href="#ai" className="transition-colors hover:text-indigo-600">AI shopping</a>
+            <a href="#orders" className="transition-colors hover:text-indigo-600">Orders</a>
           </nav>
 
           <div className="flex items-center gap-3">
-            <div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 md:flex">
-              <Search size={16} className="text-slate-400" />
+            <label className="hidden h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-600 transition focus-within:border-indigo-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-500/10 md:flex">
+              <Search size={16} className="shrink-0 text-zinc-400" />
               <input
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search products"
-                className="w-40 bg-transparent outline-none placeholder:text-slate-400"
+                placeholder="Search the store"
+                aria-label="Search products"
+                className="w-36 bg-transparent outline-none placeholder:text-zinc-400 lg:w-44"
               />
-            </div>
+            </label>
             <button
               onClick={loginDemo}
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-amber-200 hover:text-amber-600"
+              className="inline-flex min-h-10 items-center rounded-xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/15 sm:px-4 sm:text-sm"
             >
               {auth ? `Hi, ${auth.name.split(' ')[0]}` : 'Login'}
             </button>
-            <button className="flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-200 transition hover:bg-slate-800">
+            <a href="#cart" aria-label={`Cart, ${cart.length} items`} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-zinc-950 px-3.5 text-sm font-semibold text-white transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/20 active:scale-[0.98] sm:px-4">
               <ShoppingBag size={16} />
-              Cart ({cart.length})
-            </button>
+              <span className="hidden sm:inline">Cart</span>
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-md bg-white/15 px-1 text-xs">{cart.length}</span>
+            </a>
           </div>
+        </div>
+        <div className="px-4 pb-3 sm:px-6 md:hidden">
+          <label className="flex h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-600 focus-within:border-indigo-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-500/10">
+            <Search size={16} className="shrink-0 text-zinc-400" />
+            <input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search the store"
+              aria-label="Search products"
+              className="w-full bg-transparent outline-none placeholder:text-zinc-400"
+            />
+          </label>
         </div>
       </header>
 
       {notice && (
-        <div role="status" className="mx-auto mt-4 flex max-w-7xl items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div role="status" className="mx-4 mt-4 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:mx-auto sm:max-w-7xl">
           <span>{notice}</span>
-          <button onClick={() => setNotice('')} aria-label="Dismiss notification" className="ml-4 rounded-full p-1 hover:bg-amber-100">
+          <button onClick={() => setNotice('')} aria-label="Dismiss notification" className="ml-4 rounded-lg p-2 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
             <X size={16} />
           </button>
         </div>
       )}
 
-      <main className="mx-auto max-w-7xl px-4 py-8 lg:px-8">
-        <section className="rounded-[32px] bg-gradient-to-br from-[#fff7d5] via-white to-[#fff4ce] p-6 shadow-[0_28px_80px_rgba(251,191,36,0.08)] ring-1 ring-amber-100 lg:p-8">
-          <div className="grid items-center gap-8 lg:grid-cols-[1.3fr_0.9fr]">
-            <div>
-              <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-700">
-                <Sparkles size={12} />
-                Smart shopping for Nigeria
+      <main className="mx-auto max-w-7xl px-4 pb-16 pt-6 sm:px-6 lg:px-8 lg:pt-10">
+        <section className="relative isolate overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm">
+          <div className="pointer-events-none absolute -right-16 -top-28 -z-10 h-96 w-96 rounded-full bg-indigo-100/80 blur-3xl" />
+          <div className="grid items-center gap-8 p-6 sm:p-9 lg:grid-cols-[1.15fr_0.85fr] lg:p-12">
+            <div className="py-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">
+                <Sparkles size={13} />
+                A better way to shop local
               </span>
-              <h1 className="mt-5 text-4xl font-black tracking-tight text-slate-900 md:text-5xl">
+              <h1 className="mt-6 max-w-2xl text-4xl font-semibold leading-[1.08] tracking-tight text-zinc-950 sm:text-5xl lg:text-6xl">
                 Discover products your life deserves.
               </h1>
-              <p className="mt-4 max-w-xl text-base text-slate-600 md:text-lg">
-                From Lagos to Port Harcourt, BUO helps shoppers compare quality essentials, unlock deals,
-                and order with confidence.
+              <p className="mt-5 max-w-xl text-base leading-7 text-zinc-600 sm:text-lg">
+                From Lagos to Port Harcourt, find everyday essentials, discover great deals, and shop with confidence.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <a
                   href="#shop"
-                  className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-5 py-3 font-semibold text-white shadow-lg shadow-slate-200 transition hover:bg-slate-800"
+                  className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-indigo-600 px-5 font-semibold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:scale-[0.98]"
                 >
                   Shop now <ArrowRight size={16} />
                 </a>
                 <button
                   onClick={() => setAiOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-white px-5 py-3 font-semibold text-amber-700 transition hover:border-amber-300"
+                  className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-5 font-semibold text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/15 active:scale-[0.98]"
                 >
                   <MessageSquareText size={16} />
-                  AI shopping assistant
+                  Ask BUO AI
                 </button>
               </div>
-              <div className="mt-8 grid gap-4 sm:grid-cols-3">
-                <div className="rounded-2xl bg-white/80 p-4 shadow-sm ring-1 ring-slate-100">
-                  <p className="text-2xl font-black text-slate-900">30k+</p>
-                  <p className="text-sm text-slate-600">happy shoppers</p>
+              <div className="mt-9 flex flex-wrap gap-x-8 gap-y-4 border-t border-zinc-200 pt-6">
+                <div>
+                  <p className="text-xl font-semibold tracking-tight text-zinc-950">30k+</p>
+                  <p className="mt-1 text-sm text-zinc-500">happy shoppers</p>
                 </div>
-                <div className="rounded-2xl bg-white/80 p-4 shadow-sm ring-1 ring-slate-100">
-                  <p className="text-2xl font-black text-slate-900">7 days</p>
-                  <p className="text-sm text-slate-600">delivery support</p>
+                <div>
+                  <p className="text-xl font-semibold tracking-tight text-zinc-950">7 days</p>
+                  <p className="mt-1 text-sm text-zinc-500">delivery support</p>
                 </div>
-                <div className="rounded-2xl bg-white/80 p-4 shadow-sm ring-1 ring-slate-100">
-                  <p className="text-2xl font-black text-slate-900">4.9/5</p>
-                  <p className="text-sm text-slate-600">customer rating</p>
+                <div>
+                  <p className="text-xl font-semibold tracking-tight text-zinc-950">4.9/5</p>
+                  <p className="mt-1 text-sm text-zinc-500">customer rating</p>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-[28px] bg-white p-4 shadow-xl ring-1 ring-amber-100 sm:p-5">
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-4 sm:p-5">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Today’s deals</p>
-                <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">
+                <p className="text-sm font-semibold text-zinc-900">Today’s picks</p>
+                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
                   Up to 30% off
                 </span>
               </div>
 
-              <div className="mt-5 space-y-4">
+              <div className="mt-4 space-y-3">
                 {recommendations.slice(0, 3).map((product) => (
-                  <div key={product.id} className="flex items-center gap-4 rounded-2xl border border-slate-100 p-3">
-                    <img src={product.image} alt={product.name} className="h-20 w-20 rounded-2xl object-cover" />
+                  <div key={product.id} className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-white p-3 transition hover:border-zinc-300 hover:shadow-sm">
+                    <img src={product.image} alt={product.name} className="h-16 w-16 rounded-lg bg-zinc-100 object-cover sm:h-20 sm:w-20" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-slate-900">{product.name}</p>
-                      <p className="mt-1 text-xs text-slate-500">{product.category}</p>
+                      <p className="text-sm font-semibold text-zinc-900">{product.name}</p>
+                      <p className="mt-1 text-xs text-zinc-500">{product.category}</p>
                       <div className="mt-2 flex items-center justify-between">
-                        <span className="text-lg font-black text-slate-900">{currency(product.price)}</span>
+                        <span className="text-base font-semibold text-zinc-950">{currency(product.price)}</span>
                         <button
                           onClick={() => addToCart(product)}
-                          className="rounded-full bg-amber-400 px-3 py-1.5 text-xs font-bold text-slate-900"
+                          className="min-h-9 rounded-lg bg-indigo-50 px-3 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 active:scale-[0.97]"
                         >
                           Add
                         </button>
@@ -542,20 +564,27 @@ function App() {
                     </div>
                   </div>
                 ))}
+                {recommendations.length === 0 && (
+                  <div className="flex min-h-44 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-white px-5 text-center">
+                    <Sparkles size={20} className="text-indigo-500" />
+                    <p className="mt-3 text-sm font-medium text-zinc-800">Good finds are on the way</p>
+                    <p className="mt-1 max-w-xs text-xs leading-5 text-zinc-500">Our curated picks will appear here when the product catalog is connected.</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </section>
 
-        <section className="mt-8 flex flex-wrap gap-3">
+        <section aria-label="Product categories" className="mt-8 flex gap-2 overflow-x-auto pb-2">
           {categories.map((category) => (
             <button
               key={category}
               onClick={() => setSelectedCategory(category)}
-              className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+              className={`min-h-10 shrink-0 rounded-xl border px-4 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/15 ${
                 selectedCategory === category
-                  ? 'border-amber-400 bg-amber-100 text-amber-700'
-                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  ? 'border-zinc-950 bg-zinc-950 text-white'
+                  : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:text-zinc-950'
               }`}
             >
               {category}
@@ -563,116 +592,159 @@ function App() {
           ))}
         </section>
 
-        <section id="shop" className="mt-10 grid gap-6 xl:grid-cols-[1.4fr_0.7fr]">
+        <section id="shop" className="mt-7 grid scroll-mt-24 gap-7 2xl:grid-cols-[minmax(0,1fr)_340px]">
           <div>
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Browse catalog</p>
-                <h2 className="mt-2 text-3xl font-black text-slate-900">Popular picks</h2>
+                <p className="text-sm font-medium text-indigo-600">The BUO edit</p>
+                <h2 className="mt-1 text-3xl font-semibold tracking-tight text-zinc-950">Popular picks</h2>
               </div>
-              <p className="text-sm text-slate-500">{filteredProducts.length} products</p>
+              <p className="text-sm text-zinc-500">
+                {catalogLoading ? 'Finding products…' : `${filteredProducts.length} ${filteredProducts.length === 1 ? 'product' : 'products'}`}
+              </p>
             </div>
 
-            <div className="grid gap-5 md:grid-cols-2 2xl:grid-cols-3">
+            {catalogError && !catalogLoading ? (
+              <div role="status" className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white px-6 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500">
+                  <ShoppingBag size={21} />
+                </div>
+                <h3 className="mt-4 text-base font-semibold text-zinc-900">The catalog is taking a break</h3>
+                <p className="mt-1 max-w-sm text-sm leading-6 text-zinc-500">{catalogError} The storefront preview is live, but product data needs the backend.</p>
+              </div>
+            ) : catalogLoading ? (
+              <div aria-label="Loading products" aria-busy="true" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                {Array.from({ length: 8 }, (_, index) => (
+                  <div key={index} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white p-3">
+                    <div className="aspect-[4/3] animate-pulse rounded-xl bg-zinc-200" />
+                    <div className="mt-4 h-3 w-1/3 animate-pulse rounded bg-zinc-200" />
+                    <div className="mt-3 h-5 w-4/5 animate-pulse rounded bg-zinc-200" />
+                    <div className="mt-2 h-3 w-full animate-pulse rounded bg-zinc-100" />
+                    <div className="mt-5 flex items-center justify-between">
+                      <div className="h-6 w-24 animate-pulse rounded bg-zinc-200" />
+                      <div className="h-10 w-24 animate-pulse rounded-xl bg-zinc-200" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white px-6 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500">
+                  <Search size={20} />
+                </div>
+                <h3 className="mt-4 text-base font-semibold text-zinc-900">No products found</h3>
+                <p className="mt-1 max-w-sm text-sm leading-6 text-zinc-500">Try another search or choose a different category to keep exploring.</p>
+                <button
+                  onClick={() => { setSearchTerm(''); setSelectedCategory('All') }}
+                  className="mt-4 min-h-10 rounded-xl px-4 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/15"
+                >
+                  Clear filters
+                </button>
+              </div>
+            ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
               {filteredProducts.map((product) => (
-                <article key={product.id} className="group rounded-[28px] bg-white p-3 shadow-[0_16px_45px_rgba(15,23,42,0.06)] ring-1 ring-slate-100 transition hover:-translate-y-1">
-                  <div className="relative overflow-hidden rounded-[22px]">
-                    <img src={product.images?.[0]} alt={product.name} className="h-56 w-full object-cover transition duration-500 group-hover:scale-105" />
+                <article key={product.id} className="group overflow-hidden rounded-2xl border border-zinc-200 bg-white p-3 transition-all duration-300 hover:-translate-y-1 hover:border-zinc-300 hover:shadow-xl">
+                  <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-zinc-100">
+                    <img src={product.images?.[0] || product.image} alt={product.name} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
                     <button
                       onClick={() => toggleWishlist(product.id)}
-                      className={`absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full shadow-lg ${
-                        wishlist.includes(product.id) ? 'bg-rose-500 text-white' : 'bg-white/80 text-slate-700'
+                      className={`absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-xl border border-white/70 shadow-sm backdrop-blur transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:scale-95 ${
+                        wishlist.includes(product.id) ? 'bg-rose-500 text-white' : 'bg-white/90 text-zinc-700 hover:text-rose-500'
                       }`}
-                      aria-label="Toggle wishlist"
+                      aria-label={wishlist.includes(product.id) ? 'Remove from wishlist' : 'Add to wishlist'}
                     >
                       <Heart size={16} fill={wishlist.includes(product.id) ? 'currentColor' : 'none'} />
                     </button>
-                    <span className="absolute left-3 top-3 rounded-full bg-white/90 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-700">
+                    <span className="absolute left-3 top-3 rounded-lg border border-white/60 bg-white/90 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-700 backdrop-blur">
                       {product.category}
                     </span>
                   </div>
 
-                  <div className="mt-4">
-                    <div className="flex items-center justify-between text-xs text-slate-500">
+                  <div className="px-1 pb-1 pt-4">
+                    <div className="flex items-center justify-between text-xs text-zinc-500">
                       <span>{product.brand}</span>
-                      <span className="flex items-center gap-1 font-semibold text-amber-600">
+                      <span className="flex items-center gap-1 font-medium text-zinc-700">
                         <Star size={12} fill="currentColor" /> {formatRating(product.rating)}
                       </span>
                     </div>
 
-                    <button onClick={() => setSelectedProduct(product)} className="mt-3 block text-left">
-                      <h3 className="text-lg font-black text-slate-900">{product.name}</h3>
+                    <button onClick={() => setSelectedProduct(product)} className="mt-2 block min-h-12 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+                      <h3 className="line-clamp-2 text-base font-semibold leading-6 text-zinc-900">{product.name}</h3>
                     </button>
 
-                    <p className="mt-2 line-clamp-2 text-sm text-slate-600">{product.description}</p>
+                    <p className="mt-1 line-clamp-2 min-h-10 text-sm leading-5 text-zinc-500">{product.description}</p>
 
-                    <div className="mt-4 flex items-center justify-between gap-3">
+                    <div className="mt-4 flex items-end justify-between gap-2">
                       <div>
-                        <p className="text-2xl font-black text-slate-900">{currency(product.price)}</p>
-                        <p className="text-xs text-emerald-600">{product.discount}% off</p>
+                        <p className="text-lg font-semibold tracking-tight text-zinc-950">{currency(product.price)}</p>
+                        {product.discount > 0 && <p className="mt-0.5 text-xs font-medium text-emerald-700">{product.discount}% off</p>}
                       </div>
 
                       <button
                         onClick={() => addToCart(product)}
-                        className="rounded-full bg-amber-400 px-4 py-2 text-sm font-bold text-slate-900 shadow-md shadow-amber-200 transition hover:bg-amber-300"
+                        className="min-h-10 shrink-0 rounded-xl bg-indigo-600 px-3 text-sm font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:scale-95"
                       >
-                        Add to cart
+                        Add
                       </button>
                     </div>
                   </div>
                 </article>
               ))}
             </div>
+            )}
           </div>
 
-          <aside className="rounded-[30px] bg-slate-900 p-5 text-white shadow-[0_20px_70px_rgba(15,23,42,0.12)]">
+          <aside id="cart" className="scroll-mt-24 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm 2xl:sticky 2xl:top-24 2xl:self-start">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-200">Cart summary</p>
-                <h3 className="mt-2 text-2xl font-black">₦{currency(totals.subtotal).replace('₦', '').replace(/, /g, '')}</h3>
+                <p className="text-sm font-medium text-zinc-500">Your cart</p>
+                <h3 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950">{currency(totals.subtotal)}</h3>
               </div>
-              <div className="rounded-full bg-amber-400/15 px-3 py-1 text-xs font-semibold text-amber-200">
-                {cart.length} items
+              <div className="rounded-lg bg-zinc-100 px-2.5 py-1.5 text-xs font-semibold text-zinc-600">
+                {cart.reduce((total, item) => total + item.quantity, 0)} items
               </div>
             </div>
 
             <div className="mt-5 space-y-4">
               {cart.length === 0 ? (
-                <div className="rounded-2xl border border-slate-700 bg-slate-800/70 p-4 text-sm text-slate-300">
-                  Your cart is empty. Add some essentials or browse today’s deals.
+                <div className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 text-center">
+                  <ShoppingBag size={20} className="text-zinc-400" />
+                  <p className="mt-3 text-sm font-medium text-zinc-800">Your cart is empty</p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-500">Add something you love and it’ll show up here.</p>
                 </div>
               ) : (
                 cart.map((item) => (
-                  <div key={item.id} className="rounded-2xl border border-slate-700 bg-slate-800/70 p-3">
+                  <div key={item.id} className="rounded-xl border border-zinc-200 p-3">
                     <div className="flex items-center gap-3">
-                      <img src={item.images?.[0] || item.image} alt={item.name} className="h-14 w-14 rounded-xl object-cover" />
+                      <img src={item.images?.[0] || item.image} alt={item.name} className="h-14 w-14 rounded-lg bg-zinc-100 object-cover" />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold">{item.name}</p>
-                        <p className="text-xs text-slate-400">{currency(item.price)}</p>
+                        <p className="truncate text-sm font-semibold text-zinc-900">{item.name}</p>
+                        <p className="text-xs text-zinc-500">{currency(item.price)}</p>
                       </div>
                     </div>
 
                     <div className="mt-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2 rounded-full border border-slate-600 bg-slate-700 px-2 py-1">
-                        <button onClick={() => updateCartQuantity(item.id, -1)} className="p-1 text-slate-200">
+                      <div className="flex items-center gap-2 rounded-lg border border-zinc-200 px-2 py-1">
+                        <button onClick={() => updateCartQuantity(item.id, -1)} aria-label={`Decrease ${item.name} quantity`} className="rounded p-1 text-zinc-600 hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
                           <Minus size={12} />
                         </button>
-                        <span className="min-w-5 text-center text-sm font-semibold">{item.quantity}</span>
-                        <button onClick={() => updateCartQuantity(item.id, 1)} className="p-1 text-slate-200">
+                        <span className="min-w-5 text-center text-sm font-medium text-zinc-800">{item.quantity}</span>
+                        <button onClick={() => updateCartQuantity(item.id, 1)} aria-label={`Increase ${item.name} quantity`} className="rounded p-1 text-zinc-600 hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
                           <Plus size={12} />
                         </button>
                       </div>
-                      <p className="text-sm font-bold">{currency(item.price * item.quantity)}</p>
+                      <p className="text-sm font-semibold text-zinc-900">{currency(item.price * item.quantity)}</p>
                     </div>
                   </div>
                 ))
               )}
             </div>
 
-            <div className="mt-6 space-y-3 text-sm text-slate-300">
-              <div className="flex items-center justify-between"><span>Subtotal</span><span>{currency(totals.subtotal)}</span></div>
-              <div className="flex items-center justify-between"><span>Delivery</span><span>{currency(totals.delivery)}</span></div>
-              <div className="flex items-center justify-between text-base font-bold text-white"><span>Total</span><span>{currency(totals.total)}</span></div>
+            <div className="mt-5 space-y-3 border-t border-zinc-200 pt-4 text-sm text-zinc-500">
+              <div className="flex items-center justify-between"><span>Subtotal</span><span className="text-zinc-800">{currency(totals.subtotal)}</span></div>
+              <div className="flex items-center justify-between"><span>Delivery</span><span className="text-zinc-800">{currency(totals.delivery)}</span></div>
+              <div className="flex items-center justify-between border-t border-zinc-200 pt-3 text-base font-semibold text-zinc-950"><span>Total</span><span>{currency(totals.total)}</span></div>
             </div>
 
             <form onSubmit={checkoutOrder} className="mt-6 space-y-3">
@@ -680,46 +752,46 @@ function App() {
                 <input
                   value={checkoutForm.name}
                   onChange={(event) => setCheckoutForm({ ...checkoutForm, name: event.target.value })}
-                  className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-400"
+                  className="min-h-11 rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10"
                   placeholder="Full name"
                 />
                 <input
                   value={checkoutForm.phone}
                   onChange={(event) => setCheckoutForm({ ...checkoutForm, phone: event.target.value })}
-                  className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-400"
+                  className="min-h-11 rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10"
                   placeholder="Phone"
                 />
               </div>
               <input
                 value={checkoutForm.email}
                 onChange={(event) => setCheckoutForm({ ...checkoutForm, email: event.target.value })}
-                className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-400"
+                className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10"
                 placeholder="Email"
               />
               <div className="grid gap-3 sm:grid-cols-2">
                 <input
                   value={checkoutForm.state}
                   onChange={(event) => setCheckoutForm({ ...checkoutForm, state: event.target.value })}
-                  className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-400"
+                  className="min-h-11 rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10"
                   placeholder="State"
                 />
                 <input
                   value={checkoutForm.city}
                   onChange={(event) => setCheckoutForm({ ...checkoutForm, city: event.target.value })}
-                  className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-400"
+                  className="min-h-11 rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10"
                   placeholder="City"
                 />
               </div>
               <input
                 value={checkoutForm.street}
                 onChange={(event) => setCheckoutForm({ ...checkoutForm, street: event.target.value })}
-                className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-400"
+                className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10"
                 placeholder="Street address"
               />
               <select
                 value={checkoutForm.delivery}
                 onChange={(event) => setCheckoutForm({ ...checkoutForm, delivery: event.target.value })}
-                className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white"
+                className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-700 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10"
               >
                 {deliveryOptions.map((option) => (
                   <option key={option.id} value={option.id}>
@@ -730,7 +802,7 @@ function App() {
               <button
                 type="submit"
                 disabled={!cart.length}
-                className="w-full rounded-full bg-amber-400 px-4 py-3 text-sm font-black text-slate-900 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
+                className="min-h-12 w-full rounded-xl bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {auth ? 'Secure checkout' : 'Checkout as guest'}
               </button>
@@ -738,91 +810,98 @@ function App() {
           </aside>
         </section>
 
-        <section id="deals" className="mt-14 grid gap-5 lg:grid-cols-3">
+        <section id="deals" className="mt-16 grid scroll-mt-24 gap-4 lg:grid-cols-3">
           {[
             { icon: <Truck size={20} />, title: 'Fast delivery', detail: 'Standard, express, and pickup options across Nigeria.' },
             { icon: <ShieldCheck size={20} />, title: 'Secure payments', detail: 'Paystack-ready and DEMO mode when credentials are unavailable.' },
             { icon: <Check size={20} />, title: 'Verified quality', detail: 'Only reviewed products with clear stock and price snapshots.' },
           ].map((item) => (
-            <div key={item.title} className="rounded-[28px] bg-white p-5 shadow-[0_12px_45px_rgba(15,23,42,0.05)] ring-1 ring-slate-100">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-600">{item.icon}</div>
-              <h3 className="mt-4 text-xl font-black text-slate-900">{item.title}</h3>
-              <p className="mt-2 text-sm text-slate-600">{item.detail}</p>
+            <div key={item.title} className="rounded-2xl border border-zinc-200 bg-white p-5 transition hover:border-zinc-300 hover:shadow-sm">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">{item.icon}</div>
+              <h3 className="mt-4 text-base font-semibold text-zinc-900">{item.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-zinc-500">{item.detail}</p>
             </div>
           ))}
         </section>
 
-        <section className="mt-14 rounded-[30px] bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.03)] ring-1 ring-slate-100">
-          <div className="mb-6 flex items-center justify-between">
+        <section id="ai" className="mt-16 scroll-mt-24 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-7">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">AI recommendations</p>
-              <h3 className="mt-2 text-3xl font-black text-slate-900">Built for your shopping style</h3>
+              <p className="text-sm font-medium text-indigo-600">AI recommendations</p>
+              <h3 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl">Built for your shopping style</h3>
             </div>
-            <button onClick={() => setAiOpen(true)} className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+            <button onClick={() => setAiOpen(true)} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-zinc-950 px-4 text-sm font-semibold text-white transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/20 active:scale-[0.98]">
               Open assistant <ChevronRight size={16} />
             </button>
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
             {recommendations.map((product) => (
-              <div key={product.id} className="rounded-[26px] border border-slate-100 p-3">
-                <img src={product.image} alt={product.name} className="h-48 w-full rounded-[20px] object-cover" />
+              <div key={product.id} className="rounded-2xl border border-zinc-200 p-3 transition hover:shadow-md">
+                <img src={product.image} alt={product.name} className="aspect-[4/3] w-full rounded-xl bg-zinc-100 object-cover" />
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-lg font-black text-slate-900">{product.name}</p>
-                    <p className="text-sm text-slate-500">{product.category}</p>
+                    <p className="text-base font-semibold text-zinc-900">{product.name}</p>
+                    <p className="text-sm text-zinc-500">{product.category}</p>
                   </div>
-                  <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">{formatRating(product.rating)}</span>
+                  <span className="rounded-lg bg-zinc-100 px-2 py-1 text-xs font-semibold text-zinc-700">{formatRating(product.rating)}</span>
                 </div>
                 <div className="mt-3 flex items-center justify-between">
-                  <span className="text-xl font-black">{currency(product.price)}</span>
-                  <button onClick={() => addToCart(product)} className="rounded-full bg-slate-900 px-3 py-2 text-sm font-semibold text-white">
+                  <span className="text-lg font-semibold text-zinc-950">{currency(product.price)}</span>
+                  <button onClick={() => addToCart(product)} className="min-h-10 rounded-xl bg-indigo-600 px-3 text-sm font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/20 active:scale-95">
                     Add
                   </button>
                 </div>
               </div>
             ))}
+            {recommendations.length === 0 && (
+              <div className="flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-5 text-center md:col-span-3">
+                <Sparkles size={20} className="text-indigo-500" />
+                <p className="mt-3 text-sm font-medium text-zinc-800">Recommendations will appear here</p>
+                <p className="mt-1 text-sm text-zinc-500">Connect the BUO catalog to discover picks tailored to you.</p>
+              </div>
+            )}
           </div>
         </section>
 
-        <section id="orders" className="mt-14 grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="rounded-[30px] bg-white p-6 shadow-[0_16px_45px_rgba(15,23,42,0.03)] ring-1 ring-slate-100">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Order timeline</p>
-            <h3 className="mt-2 text-3xl font-black text-slate-900">Track your order</h3>
+        <section id="orders" className="mt-16 grid scroll-mt-24 gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-7">
+            <p className="text-sm font-medium text-indigo-600">Order timeline</p>
+            <h3 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950">Track your order</h3>
             <div className="mt-6 space-y-4">
               {[{ title: 'Order confirmed', active: true }, { title: 'Packed', active: true }, { title: 'In transit', active: false }, { title: 'Delivered', active: false }].map((step, index) => (
                 <div key={step.title} className="flex items-center gap-4">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-full ${step.active ? 'bg-amber-400 text-slate-900' : 'bg-slate-100 text-slate-500'}`}>
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl text-sm font-semibold ${step.active ? 'bg-indigo-600 text-white' : 'bg-zinc-100 text-zinc-500'}`}>
                     {index + 1}
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900">{step.title}</p>
-                    <p className="text-sm text-slate-500">{step.active ? 'Completed today' : 'Next step'}</p>
+                    <p className="font-medium text-zinc-900">{step.title}</p>
+                    <p className="text-sm text-zinc-500">{step.active ? 'Completed today' : 'Next step'}</p>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="rounded-[30px] bg-gradient-to-br from-amber-400 to-yellow-200 p-6 text-slate-900 shadow-[0_16px_45px_rgba(251,191,36,0.15)]">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-700">Operations</p>
-            <h3 className="mt-3 text-3xl font-black">Business overview</h3>
+          <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-7">
+            <p className="text-sm font-medium text-indigo-600">Operations</p>
+            <h3 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950">Business overview</h3>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl bg-white/60 p-3">
-                <p className="text-sm text-slate-700">Revenue</p>
-                <p className="mt-2 text-2xl font-black">{currency(analytics.revenue || 0)}</p>
+              <div className="rounded-xl bg-zinc-50 p-3">
+                <p className="text-sm text-zinc-500">Revenue</p>
+                <p className="mt-2 text-xl font-semibold text-zinc-950">{currency(analytics.revenue || 0)}</p>
               </div>
-              <div className="rounded-2xl bg-white/60 p-3">
-                <p className="text-sm text-slate-700">Orders</p>
-                <p className="mt-2 text-2xl font-black">{analytics.orders || 0}</p>
+              <div className="rounded-xl bg-zinc-50 p-3">
+                <p className="text-sm text-zinc-500">Orders</p>
+                <p className="mt-2 text-xl font-semibold text-zinc-950">{analytics.orders || 0}</p>
               </div>
-              <div className="rounded-2xl bg-white/60 p-3">
-                <p className="text-sm text-slate-700">Customers</p>
-                <p className="mt-2 text-2xl font-black">{analytics.customers || 0}</p>
+              <div className="rounded-xl bg-zinc-50 p-3">
+                <p className="text-sm text-zinc-500">Customers</p>
+                <p className="mt-2 text-xl font-semibold text-zinc-950">{analytics.customers || 0}</p>
               </div>
-              <div className="rounded-2xl bg-white/60 p-3">
-                <p className="text-sm text-slate-700">Low stock</p>
-                <p className="mt-2 text-2xl font-black">{analytics.lowStock || 0}</p>
+              <div className="rounded-xl bg-zinc-50 p-3">
+                <p className="text-sm text-zinc-500">Low stock</p>
+                <p className="mt-2 text-xl font-semibold text-zinc-950">{analytics.lowStock || 0}</p>
               </div>
             </div>
           </div>
@@ -830,49 +909,49 @@ function App() {
       </main>
 
       {selectedProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-          <div className="relative max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[30px] bg-white p-4 shadow-2xl sm:p-6">
-            <button onClick={() => setSelectedProduct(null)} className="absolute right-4 top-4 rounded-full bg-slate-100 p-2 text-slate-600">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-3 backdrop-blur-sm sm:p-4">
+          <div className="relative max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xl sm:p-6">
+            <button onClick={() => setSelectedProduct(null)} aria-label="Close product details" className="absolute right-4 top-4 z-10 rounded-xl bg-white p-2 text-zinc-600 shadow-sm ring-1 ring-zinc-200 transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/20">
               <X size={18} />
             </button>
-            <div className="grid gap-8 md:grid-cols-2">
+            <div className="grid gap-6 md:grid-cols-2">
               <div>
-                <img src={selectedProduct.images?.[0]} alt={selectedProduct.name} className="h-[420px] w-full rounded-[26px] object-cover" />
+                <img src={selectedProduct.images?.[0] || selectedProduct.image} alt={selectedProduct.name} className="aspect-square w-full rounded-xl bg-zinc-100 object-cover" />
               </div>
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-600">{selectedProduct.category}</p>
-                <h3 className="mt-3 text-3xl font-black text-slate-900">{selectedProduct.name}</h3>
-                <p className="mt-2 text-sm text-slate-500">by {selectedProduct.brand}</p>
+                <p className="text-sm font-medium text-indigo-600">{selectedProduct.category}</p>
+                <h3 className="mt-2 pr-10 text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl">{selectedProduct.name}</h3>
+                <p className="mt-2 text-sm text-zinc-500">by {selectedProduct.brand}</p>
 
-                <div className="mt-4 flex items-center gap-2 text-amber-600">
+                <div className="mt-4 flex items-center gap-2 text-zinc-700">
                   <Star size={18} fill="currentColor" />
-                  <span className="font-bold">{formatRating(selectedProduct.rating)}</span>
-                  <span className="text-sm text-slate-500">({selectedProduct.reviewCount} reviews)</span>
+                  <span className="font-semibold">{formatRating(selectedProduct.rating)}</span>
+                  <span className="text-sm text-zinc-500">({selectedProduct.reviewCount} reviews)</span>
                 </div>
 
-                <div className="mt-5 flex items-center gap-3">
-                  <span className="text-4xl font-black text-slate-900">{currency(selectedProduct.price)}</span>
-                  <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">{selectedProduct.discount}% off</span>
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <span className="text-3xl font-semibold tracking-tight text-zinc-950">{currency(selectedProduct.price)}</span>
+                  {selectedProduct.discount > 0 && <span className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700">{selectedProduct.discount}% off</span>}
                 </div>
 
-                <p className="mt-5 text-slate-600">{selectedProduct.description}</p>
+                <p className="mt-5 leading-7 text-zinc-600">{selectedProduct.description}</p>
 
-                <div className="mt-5 flex items-center gap-4">
-                  <button onClick={() => addToCart(selectedProduct)} className="rounded-full bg-amber-400 px-5 py-3 font-bold text-slate-900">
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <button onClick={() => addToCart(selectedProduct)} className="min-h-11 rounded-xl bg-indigo-600 px-5 font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/20 active:scale-95">
                     Add to cart
                   </button>
-                  <button onClick={() => toggleWishlist(selectedProduct.id)} className="rounded-full border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700">
+                  <button onClick={() => toggleWishlist(selectedProduct.id)} className="min-h-11 rounded-xl border border-zinc-200 bg-white px-5 font-semibold text-zinc-700 transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/15 active:scale-95">
                     {wishlist.includes(selectedProduct.id) ? 'Saved' : 'Save for later'}
                   </button>
                 </div>
 
-                <div className="mt-7 rounded-[22px] bg-slate-50 p-4">
-                  <h4 className="text-lg font-black text-slate-900">Specifications</h4>
+                <div className="mt-7 rounded-xl bg-zinc-50 p-4">
+                  <h4 className="text-base font-semibold text-zinc-900">Specifications</h4>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     {Object.entries(selectedProduct.specifications || {}).map(([key, value]) => (
-                      <div key={key} className="rounded-xl border border-slate-200 bg-white p-3">
-                        <p className="text-xs uppercase tracking-[0.12em] text-slate-500">{key}</p>
-                        <p className="mt-1 font-semibold text-slate-800">{value}</p>
+                      <div key={key} className="rounded-lg border border-zinc-200 bg-white p-3">
+                        <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">{key}</p>
+                        <p className="mt-1 font-medium text-zinc-800">{value}</p>
                       </div>
                     ))}
                   </div>
@@ -884,29 +963,29 @@ function App() {
       )}
 
       {aiOpen && (
-        <div className="fixed bottom-4 right-4 z-50 w-[420px] rounded-[30px] bg-white shadow-[0_30px_80px_rgba(15,23,42,0.18)] ring-1 ring-slate-200">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+        <div className="fixed inset-x-3 bottom-3 z-50 flex max-h-[min(680px,85vh)] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-[420px]">
+          <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
             <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
                 <Sparkles size={16} />
               </div>
               <div>
-                <p className="text-sm font-black text-slate-900">BUO AI</p>
-                <p className="text-[10px] text-slate-500">
+                <p className="text-sm font-semibold text-zinc-950">BUO AI</p>
+                <p className="text-xs text-zinc-500">
                   {serviceStatus.database === 'postgresql' && serviceStatus.gemini === 'configured'
                     ? 'Live catalog • Gemini'
                     : 'Setup required'}
                 </p>
               </div>
             </div>
-            <button onClick={() => setAiOpen(false)} className="rounded-full bg-slate-100 p-2 text-slate-600">
+            <button onClick={() => setAiOpen(false)} aria-label="Close BUO AI" className="rounded-lg bg-zinc-100 p-2 text-zinc-600 transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
               <X size={14} />
             </button>
           </div>
 
-          <div className="space-y-3 p-4">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
             {aiMessages.map((message, index) => (
-              <div key={`${message.role}-${index}`} className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm ${message.role === 'assistant' ? 'bg-amber-50 text-slate-800' : 'ml-auto bg-slate-900 text-white'}`}>
+              <div key={`${message.role}-${index}`} className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm leading-6 ${message.role === 'assistant' ? 'bg-zinc-100 text-zinc-800' : 'ml-auto bg-indigo-600 text-white'}`}>
                 <p>{message.text}</p>
                 {message.products?.length > 0 && (
                   <div className="mt-3 space-y-2">
@@ -917,12 +996,12 @@ function App() {
                           const match = catalog.find((item) => item.id === product.id)
                           setSelectedProduct(match || product)
                         }}
-                        className="flex w-full items-center gap-2 rounded-xl bg-white p-2 text-left ring-1 ring-amber-100"
+                        className="flex w-full items-center gap-2 rounded-xl bg-white p-2 text-left ring-1 ring-zinc-200 transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                       >
-                        <img src={product.images?.[0]} alt={product.name} className="h-10 w-10 rounded-lg object-cover" />
+                        <img src={product.images?.[0] || product.image} alt={product.name} className="h-10 w-10 rounded-lg bg-zinc-100 object-cover" />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-xs font-bold">{product.name}</span>
-                          <span className="block text-xs">{currency(product.price)}</span>
+                          <span className="block truncate text-xs font-semibold text-zinc-900">{product.name}</span>
+                          <span className="block text-xs text-zinc-500">{currency(product.price)}</span>
                         </span>
                       </button>
                     ))}
@@ -931,16 +1010,16 @@ function App() {
               </div>
             ))}
             {aiLoading && (
-              <div role="status" className="max-w-[80%] rounded-2xl bg-amber-50 px-3 py-2 text-sm text-slate-500">
+              <div role="status" className="max-w-[80%] animate-pulse rounded-2xl bg-zinc-100 px-3 py-2 text-sm text-zinc-500">
                 Searching the BUO catalog…
               </div>
             )}
           </div>
 
-          <div className="border-t border-slate-100 p-3">
+          <div className="border-t border-zinc-200 p-3">
             <div className="mb-3 flex flex-wrap gap-2">
               {['Budget phone under ₦500,000', 'Smart TV for my apartment', 'Best laptop for work'].map((prompt) => (
-                <button key={prompt} onClick={() => setAiInput(prompt)} className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-200">
+                <button key={prompt} onClick={() => setAiInput(prompt)} className="min-h-8 rounded-lg bg-zinc-100 px-2.5 py-1 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
                   {prompt}
                 </button>
               ))}
@@ -951,9 +1030,9 @@ function App() {
                 onChange={(event) => setAiInput(event.target.value)}
                 onKeyDown={(event) => event.key === 'Enter' && sendAiPrompt()}
                 placeholder="Ask BUO AI..."
-                className="flex-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-amber-300"
+                className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-zinc-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10"
               />
-              <button onClick={sendAiPrompt} disabled={aiLoading} className="rounded-full bg-amber-400 px-4 py-2 text-sm font-bold text-slate-900 disabled:opacity-50">
+              <button onClick={sendAiPrompt} disabled={aiLoading} className="min-h-10 rounded-xl bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
                 Send
               </button>
             </div>
@@ -962,24 +1041,24 @@ function App() {
       )}
 
       {guestOrder && (
-        <div className="fixed bottom-6 left-6 z-50 max-w-md rounded-[26px] bg-slate-900 p-5 text-white shadow-2xl">
+        <div className="fixed bottom-4 left-4 right-4 z-50 max-w-md rounded-2xl border border-zinc-200 bg-white p-5 text-zinc-900 shadow-2xl sm:bottom-6 sm:left-6 sm:right-auto">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">Order placed</p>
-              <h4 className="mt-2 text-xl font-black">{guestOrder.id}</h4>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600">Order placed</p>
+              <h4 className="mt-2 text-xl font-semibold">{guestOrder.id}</h4>
             </div>
-            <button onClick={() => setGuestOrder(null)} className="rounded-full bg-slate-700 p-2">
+            <button onClick={() => setGuestOrder(null)} aria-label="Dismiss order confirmation" className="rounded-lg bg-zinc-100 p-2 text-zinc-600 transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
               <X size={14} />
             </button>
           </div>
-          <p className="mt-3 text-sm text-slate-300">
+          <p className="mt-3 text-sm leading-6 text-zinc-600">
             {guestOrder.mode === 'DEMO_PREVIEW'
               ? 'DEMO preview only. No server-side order or payment was created.'
               : 'DEMO payment mode: no money was collected. The order is saved as pending until payment is integrated.'}
           </p>
-          <div className="mt-4 flex items-center justify-between rounded-2xl bg-slate-800 p-3 text-sm">
+          <div className="mt-4 flex items-center justify-between rounded-xl bg-zinc-100 p-3 text-sm">
             <span>Status</span>
-            <span className="rounded-full bg-amber-400 px-2 py-1 text-xs font-bold text-slate-900">{guestOrder.status}</span>
+            <span className="rounded-lg bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-800">{guestOrder.status}</span>
           </div>
         </div>
       )}
