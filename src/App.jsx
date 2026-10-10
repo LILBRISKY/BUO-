@@ -23,6 +23,8 @@ const currency = (value) =>
     maximumFractionDigits: 0,
   }).format(value)
 
+const apiUrl = (path) => `${import.meta.env.VITE_API_BASE_URL || ''}${path}`
+
 const formatRating = (value) => Number(value || 0).toFixed(1)
 
 function App() {
@@ -33,6 +35,13 @@ function App() {
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [cart, setCart] = useState([])
   const [wishlist, setWishlist] = useState([])
+  const [notice, setNotice] = useState('')
+  const [serviceStatus, setServiceStatus] = useState({ database: 'checking', gemini: 'checking' })
+  const [deliveryOptions, setDeliveryOptions] = useState([
+    { id: 'standard', label: 'Standard delivery', fee: 2500 },
+    { id: 'express', label: 'Express delivery', fee: 6000 },
+    { id: 'pickup', label: 'Pickup', fee: 0 },
+  ])
   const [aiOpen, setAiOpen] = useState(false)
   const [analytics, setAnalytics] = useState({
     revenue: 0,
@@ -51,6 +60,8 @@ function App() {
     },
   ])
   const [aiInput, setAiInput] = useState('')
+  const [aiConversationId, setAiConversationId] = useState('new')
+  const [aiLoading, setAiLoading] = useState(false)
   const [guestOrder, setGuestOrder] = useState(null)
   const [checkoutForm, setCheckoutForm] = useState({
     name: 'Ada Okafor',
@@ -65,9 +76,16 @@ function App() {
   })
 
   useEffect(() => {
+    fetch(apiUrl('/health'))
+      .then((response) => response.json())
+      .then((status) => setServiceStatus(status))
+      .catch(() => setServiceStatus({ database: 'unavailable', gemini: 'unavailable' }))
+  }, [])
+
+  useEffect(() => {
     const loadCategories = async () => {
       try {
-        const res = await fetch('/api/categories')
+        const res = await fetch(apiUrl('/api/categories'))
         const data = await res.json()
         if (data?.data) {
           setCategories(['All', ...data.data])
@@ -84,7 +102,7 @@ function App() {
       params.set('limit', '12')
 
       try {
-        const res = await fetch(`/api/products?${params.toString()}`)
+        const res = await fetch(apiUrl(`/api/products?${params.toString()}`))
         const data = await res.json()
         setCatalog(data?.data || [])
       } catch {
@@ -94,7 +112,7 @@ function App() {
 
     const loadRecommendations = async () => {
       try {
-        const res = await fetch('/api/recommendations')
+        const res = await fetch(apiUrl('/api/recommendations'))
         const data = await res.json()
         setRecommendations(data?.data || [])
       } catch {
@@ -102,9 +120,19 @@ function App() {
       }
     }
 
+    const loadDeliveryOptions = async () => {
+      try {
+        const response = await fetch(apiUrl('/api/delivery-options'))
+        const data = await response.json()
+        if (data?.success && Array.isArray(data.data)) setDeliveryOptions(data.data)
+      } catch {
+        setNotice('Could not load delivery prices from the server.')
+      }
+    }
+
     const loadAnalytics = async () => {
       try {
-        const res = await fetch('/api/admin/analytics', {
+        const res = await fetch(apiUrl('/api/admin/analytics'), {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('buoToken') || ''}`,
           },
@@ -131,6 +159,7 @@ function App() {
     loadCategories()
     loadProducts()
     loadRecommendations()
+    loadDeliveryOptions()
     loadAnalytics()
   }, [searchTerm, selectedCategory])
 
@@ -138,13 +167,27 @@ function App() {
     const token = localStorage.getItem('buoToken')
     if (!token) return
 
-    fetch('/api/me', {
+    fetch(apiUrl('/api/me'), {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
       .then((data) => {
         if (data?.user) {
           setAuth(data.user)
+          Promise.all([
+            fetch(apiUrl('/api/cart'), { headers: { Authorization: `Bearer ${token}` } }).then((res) => res.json()),
+            fetch(apiUrl('/api/wishlist'), { headers: { Authorization: `Bearer ${token}` } }).then((res) => res.json()),
+          ]).then(([cartData, wishlistData]) => {
+            if (cartData?.success) {
+              setCart(cartData.data.items.map((item) => ({
+                ...item,
+                id: item.productId,
+                cartItemId: item.id,
+                images: item.image ? [item.image] : [],
+              })))
+            }
+            if (wishlistData?.success) setWishlist(wishlistData.data.map((item) => item.id))
+          }).catch(() => setNotice('Could not load your saved cart and wishlist.'))
         }
       })
       .catch(() => {
@@ -155,12 +198,43 @@ function App() {
   const filteredProducts = useMemo(() => catalog, [catalog])
   const totals = useMemo(() => {
     const subtotal = cart.reduce((total, item) => total + item.price * item.quantity, 0)
-    const delivery = cart.length ? 2500 : 0
+    const delivery = cart.length
+      ? deliveryOptions.find((option) => option.id === checkoutForm.delivery)?.fee || 0
+      : 0
     const total = subtotal + delivery
     return { subtotal, delivery, total }
-  }, [cart])
+  }, [cart, checkoutForm.delivery, deliveryOptions])
 
-  const addToCart = (product) => {
+  const refreshUserCart = async (token) => {
+    const response = await fetch(apiUrl('/api/cart'), { headers: { Authorization: `Bearer ${token}` } })
+    const data = await response.json()
+    if (!response.ok || !data?.success) throw new Error(data?.error || 'Could not refresh your cart.')
+    setCart(data.data.items.map((item) => ({
+      ...item,
+      id: item.productId,
+      cartItemId: item.id,
+      images: item.image ? [item.image] : [],
+    })))
+  }
+
+  const addToCart = async (product) => {
+    const token = localStorage.getItem('buoToken')
+    if (token && auth) {
+      try {
+        const response = await fetch(apiUrl('/api/cart/items'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ productId: product.id, quantity: 1 }),
+        })
+        const data = await response.json()
+        if (!response.ok || !data?.success) throw new Error(data?.error || 'Could not add this product to your cart.')
+        await refreshUserCart(token)
+        setNotice(`${product.name} added to your saved cart.`)
+      } catch (error) {
+        setNotice(error.message)
+      }
+      return
+    }
     setCart((current) => {
       const existing = current.find((item) => item.id === product.id)
       if (existing) {
@@ -170,9 +244,27 @@ function App() {
       }
       return [...current, { ...product, quantity: 1 }]
     })
+    setNotice(`${product.name} added to your cart.`)
   }
 
-  const updateCartQuantity = (productId, change) => {
+  const updateCartQuantity = async (productId, change) => {
+    const currentItem = cart.find((item) => item.id === productId)
+    const token = localStorage.getItem('buoToken')
+    if (token && auth && currentItem?.cartItemId) {
+      try {
+        const response = await fetch(apiUrl(`/api/cart/items/${currentItem.cartItemId}`), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ quantity: Math.max(1, currentItem.quantity + change) }),
+        })
+        const data = await response.json()
+        if (!response.ok || !data?.success) throw new Error(data?.error || 'Could not update your cart.')
+        await refreshUserCart(token)
+      } catch (error) {
+        setNotice(error.message)
+      }
+      return
+    }
     setCart((current) =>
       current
         .map((item) =>
@@ -182,7 +274,25 @@ function App() {
     )
   }
 
-  const toggleWishlist = (productId) => {
+  const toggleWishlist = async (productId) => {
+    const token = localStorage.getItem('buoToken')
+    if (token && auth) {
+      const removing = wishlist.includes(productId)
+      try {
+        const response = await fetch(apiUrl(`/api/wishlist/${productId}`), {
+          method: removing ? 'DELETE' : 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = response.status === 204 ? {} : await response.json()
+        if (!response.ok || (data.success === false)) throw new Error(data?.error || 'Could not update your wishlist.')
+        setWishlist((current) => removing
+          ? current.filter((id) => id !== productId)
+          : [...new Set([...current, productId])])
+      } catch (error) {
+        setNotice(error.message)
+      }
+      return
+    }
     setWishlist((current) =>
       current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId],
     )
@@ -190,18 +300,34 @@ function App() {
 
   const loginDemo = async () => {
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: 'ada@buo.ng', password: 'password123' }),
       })
       const data = await response.json()
-      if (data?.token) {
-        localStorage.setItem('buoToken', data.token)
-        setAuth(data.user)
+      if (!response.ok || !data?.token) throw new Error(data?.error || 'Login failed.')
+      localStorage.setItem('buoToken', data.token)
+      setAuth(data.user)
+      for (const item of cart) {
+        const cartResponse = await fetch(apiUrl('/api/cart/items'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.token}` },
+          body: JSON.stringify({ productId: item.id, quantity: item.quantity }),
+        })
+        const cartData = await cartResponse.json()
+        if (!cartResponse.ok || !cartData?.success) {
+          throw new Error(cartData?.error || 'Could not move your guest cart to your account.')
+        }
       }
-    } catch {
-      setAuth({ name: 'Guest Shopper', email: 'guest@buo.ng', role: 'CUSTOMER' })
+      await refreshUserCart(data.token)
+      const wishlistResponse = await fetch(apiUrl('/api/wishlist'), {
+        headers: { Authorization: `Bearer ${data.token}` },
+      })
+      const wishlistData = await wishlistResponse.json()
+      if (wishlistData?.success) setWishlist(wishlistData.data.map((item) => item.id))
+    } catch (error) {
+      setNotice(error.message || 'Login failed. Check the backend connection and development seed.')
     }
   }
 
@@ -213,7 +339,6 @@ function App() {
       try {
         const body = {
           deliveryMethod: checkoutForm.delivery,
-          couponCode: 'BUO10',
           address: {
             fullName: checkoutForm.name,
             email: checkoutForm.email,
@@ -226,7 +351,7 @@ function App() {
           },
         }
 
-        const res = await fetch('/api/orders', {
+        const res = await fetch(apiUrl('/api/orders'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -236,13 +361,15 @@ function App() {
         })
 
         const data = await res.json()
-        if (data?.success) {
-          setCart([])
-          setGuestOrder({ id: data.data.id, status: 'PENDING_PAYMENT', mode: 'DEMO' })
-        }
-      } catch {
+        if (!res.ok || !data?.success) throw new Error(data?.error || 'Could not place your order.')
         setCart([])
-        setGuestOrder({ id: `BUO-${Date.now()}`, status: 'PENDING_PAYMENT', mode: 'DEMO' })
+        setGuestOrder({
+          id: data.data.id,
+          status: data.data.status,
+          mode: data.data.paymentMode || 'DEMO',
+        })
+      } catch (error) {
+        setNotice(error.message || 'Could not place your order.')
       }
       return
     }
@@ -250,7 +377,7 @@ function App() {
     setGuestOrder({
       id: `BUO-${Date.now()}`,
       status: 'PENDING_PAYMENT',
-      mode: 'DEMO',
+      mode: 'DEMO_PREVIEW',
       total: totals.total,
     })
     setCart([])
@@ -258,25 +385,33 @@ function App() {
 
   const sendAiPrompt = async () => {
     const trimmed = aiInput.trim()
-    if (!trimmed) return
+    if (!trimmed || aiLoading) return
 
     setAiMessages((current) => [...current, { role: 'user', text: trimmed }])
     setAiInput('')
+    setAiLoading(true)
 
     try {
-      const response = await fetch('/api/ai/conversations/demo/messages', {
+      const response = await fetch(apiUrl(`/api/ai/conversations/${aiConversationId}/messages`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: trimmed }),
       })
       const data = await response.json()
-      const reply = data?.data?.reply?.text || 'BUO has no suitable product in the current catalog.'
-      setAiMessages((current) => [...current, { role: 'assistant', text: reply }])
-    } catch {
+      if (!response.ok || !data?.success) throw new Error(data?.error || 'AI request failed.')
+      setAiConversationId(data.data.conversationId)
+      setAiMessages((current) => [...current, {
+        role: 'assistant',
+        text: data.data.reply.text,
+        products: data.data.reply.data || [],
+      }])
+    } catch (error) {
       setAiMessages((current) => [
         ...current,
-        { role: 'assistant', text: 'The AI assistant is currently running in DEMO mode. Try “budget phone under ₦500,000”.' },
+        { role: 'assistant', text: error.message || 'AI is currently unavailable. Check the backend configuration and try again.' },
       ])
+    } finally {
+      setAiLoading(false)
     }
   }
 
@@ -324,6 +459,15 @@ function App() {
           </div>
         </div>
       </header>
+
+      {notice && (
+        <div role="status" className="mx-auto mt-4 flex max-w-7xl items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span>{notice}</span>
+          <button onClick={() => setNotice('')} aria-label="Dismiss notification" className="ml-4 rounded-full p-1 hover:bg-amber-100">
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       <main className="mx-auto max-w-7xl px-4 py-8 lg:px-8">
         <section className="rounded-[32px] bg-gradient-to-br from-[#fff7d5] via-white to-[#fff4ce] p-6 shadow-[0_28px_80px_rgba(251,191,36,0.08)] ring-1 ring-amber-100 lg:p-8">
@@ -577,9 +721,11 @@ function App() {
                 onChange={(event) => setCheckoutForm({ ...checkoutForm, delivery: event.target.value })}
                 className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white"
               >
-                <option value="standard">Standard delivery</option>
-                <option value="express">Express delivery</option>
-                <option value="pickup">Pickup</option>
+                {deliveryOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label} · {currency(option.fee)}
+                  </option>
+                ))}
               </select>
               <button
                 type="submit"
@@ -746,7 +892,11 @@ function App() {
               </div>
               <div>
                 <p className="text-sm font-black text-slate-900">BUO AI</p>
-                <p className="text-[10px] text-slate-500">Product discovery • DEMO</p>
+                <p className="text-[10px] text-slate-500">
+                  {serviceStatus.database === 'postgresql' && serviceStatus.gemini === 'configured'
+                    ? 'Live catalog • Gemini'
+                    : 'Setup required'}
+                </p>
               </div>
             </div>
             <button onClick={() => setAiOpen(false)} className="rounded-full bg-slate-100 p-2 text-slate-600">
@@ -756,10 +906,35 @@ function App() {
 
           <div className="space-y-3 p-4">
             {aiMessages.map((message, index) => (
-              <div key={`${message.role}-${index}`} className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${message.role === 'assistant' ? 'bg-amber-50 text-slate-800' : 'ml-auto bg-slate-900 text-white'}`}>
-                {message.text}
+              <div key={`${message.role}-${index}`} className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm ${message.role === 'assistant' ? 'bg-amber-50 text-slate-800' : 'ml-auto bg-slate-900 text-white'}`}>
+                <p>{message.text}</p>
+                {message.products?.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {message.products.map((product) => (
+                      <button
+                        key={product.id}
+                        onClick={() => {
+                          const match = catalog.find((item) => item.id === product.id)
+                          setSelectedProduct(match || product)
+                        }}
+                        className="flex w-full items-center gap-2 rounded-xl bg-white p-2 text-left ring-1 ring-amber-100"
+                      >
+                        <img src={product.images?.[0]} alt={product.name} className="h-10 w-10 rounded-lg object-cover" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs font-bold">{product.name}</span>
+                          <span className="block text-xs">{currency(product.price)}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
+            {aiLoading && (
+              <div role="status" className="max-w-[80%] rounded-2xl bg-amber-50 px-3 py-2 text-sm text-slate-500">
+                Searching the BUO catalog…
+              </div>
+            )}
           </div>
 
           <div className="border-t border-slate-100 p-3">
@@ -778,7 +953,7 @@ function App() {
                 placeholder="Ask BUO AI..."
                 className="flex-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-amber-300"
               />
-              <button onClick={sendAiPrompt} className="rounded-full bg-amber-400 px-4 py-2 text-sm font-bold text-slate-900">
+              <button onClick={sendAiPrompt} disabled={aiLoading} className="rounded-full bg-amber-400 px-4 py-2 text-sm font-bold text-slate-900 disabled:opacity-50">
                 Send
               </button>
             </div>
@@ -798,9 +973,9 @@ function App() {
             </button>
           </div>
           <p className="mt-3 text-sm text-slate-300">
-            {guestOrder.mode === 'DEMO'
-              ? 'DEMO payment mode enabled. This order is sitting in pending payment until live Paystack credentials are configured.'
-              : 'Payment verified and order created.'}
+            {guestOrder.mode === 'DEMO_PREVIEW'
+              ? 'DEMO preview only. No server-side order or payment was created.'
+              : 'DEMO payment mode: no money was collected. The order is saved as pending until payment is integrated.'}
           </p>
           <div className="mt-4 flex items-center justify-between rounded-2xl bg-slate-800 p-3 text-sm">
             <span>Status</span>

@@ -1,3 +1,4 @@
+-- Initial BUO PostgreSQL schema.
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY,
   name VARCHAR(150) NOT NULL,

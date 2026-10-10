@@ -7,6 +7,8 @@
     "dev": "concurrently -k \"node --watch server/index.js\" \"vite --host 0.0.0.0 --port 5173\"",
     "build": "vite build",
     "start": "node server/index.js",
+    "db:migrate": "node server/db/migrate.js",
+    "db:seed": "node server/db/seed.js",
     "lint": "oxlint src server",
     "preview": "vite preview --host 0.0.0.0 --port 4173"
   },
