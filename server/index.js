@@ -985,7 +985,7 @@ app.post('/api/ai/conversations/:id/messages', aiRateLimit, async (req, res) => 
   }
   let intent;
   try {
-    intent = await getShoppingIntent(geminiApiKey, message);
+    intent = await getShoppingIntent(geminiApiKey, message, req.body?.context || null);
   } catch (error) {
     console.error('BUO Gemini intent request failed:', error.status || error.name);
     return res.status(502).json({

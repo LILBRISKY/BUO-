@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import {
   ArrowRight,
   Check,
@@ -34,6 +35,7 @@ function App() {
   const [catalogError, setCatalogError] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [cart, setCart] = useState([])
   const [wishlist, setWishlist] = useState([])
@@ -64,6 +66,7 @@ function App() {
   const [aiInput, setAiInput] = useState('')
   const [aiConversationId, setAiConversationId] = useState('new')
   const [aiLoading, setAiLoading] = useState(false)
+  const [aiStatusStage, setAiStatusStage] = useState('')
   const [guestOrder, setGuestOrder] = useState(null)
   const [checkoutForm, setCheckoutForm] = useState({
     name: 'Ada Okafor',
@@ -85,6 +88,13 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm)
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  useEffect(() => {
     const loadCategories = async () => {
       try {
         const res = await fetch(apiUrl('/api/categories'))
@@ -99,7 +109,7 @@ function App() {
 
     const loadProducts = async () => {
       const params = new URLSearchParams()
-      if (searchTerm) params.set('search', searchTerm)
+      if (debouncedSearch) params.set('search', debouncedSearch)
       if (selectedCategory !== 'All') params.set('category', selectedCategory)
       params.set('limit', '12')
 
@@ -169,7 +179,7 @@ function App() {
     loadRecommendations()
     loadDeliveryOptions()
     loadAnalytics()
-  }, [searchTerm, selectedCategory])
+  }, [debouncedSearch, selectedCategory])
 
   useEffect(() => {
     const token = localStorage.getItem('buoToken')
@@ -398,12 +408,28 @@ function App() {
     setAiMessages((current) => [...current, { role: 'user', text: trimmed }])
     setAiInput('')
     setAiLoading(true)
+    setAiStatusStage('Understanding your shopping request…')
+
+    const timer1 = setTimeout(() => {
+      setAiStatusStage('Searching BUO catalog in PostgreSQL…')
+    }, 1500)
+
+    const timer2 = setTimeout(() => {
+      setAiStatusStage('Selecting recommendations for you…')
+    }, 3500)
 
     try {
+      const cartCategories = [...new Set(cart.map((item) => item.category).filter(Boolean))]
       const response = await fetch(apiUrl(`/api/ai/conversations/${aiConversationId}/messages`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: trimmed }),
+        body: JSON.stringify({
+          message: trimmed,
+          context: {
+            cartCategories,
+            cartCount: cart.reduce((total, item) => total + item.quantity, 0),
+          },
+        }),
       })
       const data = await response.json()
       if (!response.ok || !data?.success) throw new Error(data?.error || 'AI request failed.')
@@ -419,7 +445,10 @@ function App() {
         { role: 'assistant', text: error.message || 'AI is currently unavailable. Check the backend configuration and try again.' },
       ])
     } finally {
+      clearTimeout(timer1)
+      clearTimeout(timer2)
       setAiLoading(false)
+      setAiStatusStage('')
     }
   }
 
@@ -908,160 +937,191 @@ function App() {
         </section>
       </main>
 
-      {selectedProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-3 backdrop-blur-sm sm:p-4">
-          <div className="relative max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xl sm:p-6">
-            <button onClick={() => setSelectedProduct(null)} aria-label="Close product details" className="absolute right-4 top-4 z-10 rounded-xl bg-white p-2 text-zinc-600 shadow-sm ring-1 ring-zinc-200 transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/20">
-              <X size={18} />
-            </button>
-            <div className="grid gap-6 md:grid-cols-2">
-              <div>
-                <img src={selectedProduct.images?.[0] || selectedProduct.image} alt={selectedProduct.name} className="aspect-square w-full rounded-xl bg-zinc-100 object-cover" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-indigo-600">{selectedProduct.category}</p>
-                <h3 className="mt-2 pr-10 text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl">{selectedProduct.name}</h3>
-                <p className="mt-2 text-sm text-zinc-500">by {selectedProduct.brand}</p>
-
-                <div className="mt-4 flex items-center gap-2 text-zinc-700">
-                  <Star size={18} fill="currentColor" />
-                  <span className="font-semibold">{formatRating(selectedProduct.rating)}</span>
-                  <span className="text-sm text-zinc-500">({selectedProduct.reviewCount} reviews)</span>
+      <AnimatePresence>
+        {selectedProduct && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-3 backdrop-blur-sm sm:p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              transition={{ type: 'spring', bounce: 0, duration: 0.35 }}
+              className="relative max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-4 shadow-2xl sm:p-6"
+            >
+              <button onClick={() => setSelectedProduct(null)} aria-label="Close product details" className="absolute right-4 top-4 z-10 rounded-xl bg-white p-2 text-zinc-600 shadow-sm ring-1 ring-zinc-200 transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/20">
+                <X size={18} />
+              </button>
+              <div className="grid gap-6 md:grid-cols-2">
+                <div>
+                  <img src={selectedProduct.images?.[0] || selectedProduct.image} alt={selectedProduct.name} className="aspect-square w-full rounded-xl bg-zinc-100 object-cover" />
                 </div>
+                <div>
+                  <p className="text-sm font-medium text-indigo-600">{selectedProduct.category}</p>
+                  <h3 className="mt-2 pr-10 text-2xl font-semibold tracking-tight text-zinc-950 sm:text-3xl">{selectedProduct.name}</h3>
+                  <p className="mt-2 text-sm text-zinc-500">by {selectedProduct.brand}</p>
 
-                <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <span className="text-3xl font-semibold tracking-tight text-zinc-950">{currency(selectedProduct.price)}</span>
-                  {selectedProduct.discount > 0 && <span className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700">{selectedProduct.discount}% off</span>}
-                </div>
+                  <div className="mt-4 flex items-center gap-2 text-zinc-700">
+                    <Star size={18} fill="currentColor" />
+                    <span className="font-semibold">{formatRating(selectedProduct.rating)}</span>
+                    <span className="text-sm text-zinc-500">({selectedProduct.reviewCount} reviews)</span>
+                  </div>
 
-                <p className="mt-5 leading-7 text-zinc-600">{selectedProduct.description}</p>
+                  <div className="mt-5 flex flex-wrap items-center gap-3">
+                    <span className="text-3xl font-semibold tracking-tight text-zinc-950">{currency(selectedProduct.price)}</span>
+                    {selectedProduct.discount > 0 && <span className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700">{selectedProduct.discount}% off</span>}
+                  </div>
 
-                <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <button onClick={() => addToCart(selectedProduct)} className="min-h-11 rounded-xl bg-indigo-600 px-5 font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/20 active:scale-95">
-                    Add to cart
-                  </button>
-                  <button onClick={() => toggleWishlist(selectedProduct.id)} className="min-h-11 rounded-xl border border-zinc-200 bg-white px-5 font-semibold text-zinc-700 transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/15 active:scale-95">
-                    {wishlist.includes(selectedProduct.id) ? 'Saved' : 'Save for later'}
-                  </button>
-                </div>
+                  <p className="mt-5 leading-7 text-zinc-600">{selectedProduct.description}</p>
 
-                <div className="mt-7 rounded-xl bg-zinc-50 p-4">
-                  <h4 className="text-base font-semibold text-zinc-900">Specifications</h4>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    {Object.entries(selectedProduct.specifications || {}).map(([key, value]) => (
-                      <div key={key} className="rounded-lg border border-zinc-200 bg-white p-3">
-                        <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">{key}</p>
-                        <p className="mt-1 font-medium text-zinc-800">{value}</p>
-                      </div>
-                    ))}
+                  <div className="mt-5 flex flex-wrap items-center gap-3">
+                    <button onClick={() => addToCart(selectedProduct)} className="min-h-11 rounded-xl bg-indigo-600 px-5 font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/20 active:scale-95">
+                      Add to cart
+                    </button>
+                    <button onClick={() => toggleWishlist(selectedProduct.id)} className="min-h-11 rounded-xl border border-zinc-200 bg-white px-5 font-semibold text-zinc-700 transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/15 active:scale-95">
+                      {wishlist.includes(selectedProduct.id) ? 'Saved' : 'Save for later'}
+                    </button>
+                  </div>
+
+                  <div className="mt-7 rounded-xl bg-zinc-50 p-4">
+                    <h4 className="text-base font-semibold text-zinc-900">Specifications</h4>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      {Object.entries(selectedProduct.specifications || {}).map(([key, value]) => (
+                        <div key={key} className="rounded-lg border border-zinc-200 bg-white p-3">
+                          <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">{key}</p>
+                          <p className="mt-1 font-medium text-zinc-800">{value}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {aiOpen && (
-        <div className="fixed inset-x-3 bottom-3 z-50 flex max-h-[min(680px,85vh)] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-[420px]">
-          <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                <Sparkles size={16} />
+      <AnimatePresence>
+        {aiOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 24, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 24, scale: 0.96 }}
+            transition={{ type: 'spring', bounce: 0, duration: 0.35 }}
+            className="fixed inset-x-3 bottom-3 z-50 flex max-h-[min(680px,85vh)] flex-col overflow-hidden rounded-2xl border border-white/40 bg-white/90 shadow-2xl backdrop-blur-xl sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-[420px]"
+          >
+            <div className="flex items-center justify-between border-b border-zinc-200/80 px-4 py-3 bg-white/50 backdrop-blur-md">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                  <Sparkles size={16} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-zinc-950">BUO AI</p>
+                  <p className="text-xs text-zinc-500">
+                    {serviceStatus.database === 'postgresql' && serviceStatus.gemini === 'configured'
+                      ? 'Live catalog • Gemini'
+                      : 'Setup required'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-semibold text-zinc-950">BUO AI</p>
-                <p className="text-xs text-zinc-500">
-                  {serviceStatus.database === 'postgresql' && serviceStatus.gemini === 'configured'
-                    ? 'Live catalog • Gemini'
-                    : 'Setup required'}
-                </p>
-              </div>
-            </div>
-            <button onClick={() => setAiOpen(false)} aria-label="Close BUO AI" className="rounded-lg bg-zinc-100 p-2 text-zinc-600 transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
-              <X size={14} />
-            </button>
-          </div>
-
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-            {aiMessages.map((message, index) => (
-              <div key={`${message.role}-${index}`} className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm leading-6 ${message.role === 'assistant' ? 'bg-zinc-100 text-zinc-800' : 'ml-auto bg-indigo-600 text-white'}`}>
-                <p>{message.text}</p>
-                {message.products?.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    {message.products.map((product) => (
-                      <button
-                        key={product.id}
-                        onClick={() => {
-                          const match = catalog.find((item) => item.id === product.id)
-                          setSelectedProduct(match || product)
-                        }}
-                        className="flex w-full items-center gap-2 rounded-xl bg-white p-2 text-left ring-1 ring-zinc-200 transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                      >
-                        <img src={product.images?.[0] || product.image} alt={product.name} className="h-10 w-10 rounded-lg bg-zinc-100 object-cover" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-xs font-semibold text-zinc-900">{product.name}</span>
-                          <span className="block text-xs text-zinc-500">{currency(product.price)}</span>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-            {aiLoading && (
-              <div role="status" className="max-w-[80%] animate-pulse rounded-2xl bg-zinc-100 px-3 py-2 text-sm text-zinc-500">
-                Searching the BUO catalog…
-              </div>
-            )}
-          </div>
-
-          <div className="border-t border-zinc-200 p-3">
-            <div className="mb-3 flex flex-wrap gap-2">
-              {['Budget phone under ₦500,000', 'Smart TV for my apartment', 'Best laptop for work'].map((prompt) => (
-                <button key={prompt} onClick={() => setAiInput(prompt)} className="min-h-8 rounded-lg bg-zinc-100 px-2.5 py-1 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
-                  {prompt}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <input
-                value={aiInput}
-                onChange={(event) => setAiInput(event.target.value)}
-                onKeyDown={(event) => event.key === 'Enter' && sendAiPrompt()}
-                placeholder="Ask BUO AI..."
-                className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-zinc-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10"
-              />
-              <button onClick={sendAiPrompt} disabled={aiLoading} className="min-h-10 rounded-xl bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
-                Send
+              <button onClick={() => setAiOpen(false)} aria-label="Close BUO AI" className="rounded-lg bg-zinc-100 p-2 text-zinc-600 transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+                <X size={14} />
               </button>
             </div>
-          </div>
-        </div>
-      )}
 
-      {guestOrder && (
-        <div className="fixed bottom-4 left-4 right-4 z-50 max-w-md rounded-2xl border border-zinc-200 bg-white p-5 text-zinc-900 shadow-2xl sm:bottom-6 sm:left-6 sm:right-auto">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600">Order placed</p>
-              <h4 className="mt-2 text-xl font-semibold">{guestOrder.id}</h4>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+              {aiMessages.map((message, index) => (
+                <div key={`${message.role}-${index}`} className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm leading-6 ${message.role === 'assistant' ? 'bg-zinc-100/90 text-zinc-800' : 'ml-auto bg-indigo-600 text-white'}`}>
+                  <p>{message.text}</p>
+                  {message.products?.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {message.products.map((product) => (
+                        <button
+                          key={product.id}
+                          onClick={() => {
+                            const match = catalog.find((item) => item.id === product.id)
+                            setSelectedProduct(match || product)
+                          }}
+                          className="flex w-full items-center gap-2 rounded-xl bg-white p-2 text-left ring-1 ring-zinc-200 transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 active:scale-[0.98]"
+                        >
+                          <img src={product.images?.[0] || product.image} alt={product.name} className="h-10 w-10 rounded-lg bg-zinc-100 object-cover" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-semibold text-zinc-900">{product.name}</span>
+                            <span className="block text-xs text-zinc-500">{currency(product.price)}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {aiLoading && (
+                <div role="status" className="flex max-w-[85%] items-center gap-2 rounded-2xl border border-indigo-100 bg-indigo-50/90 px-3.5 py-2.5 text-xs font-medium text-indigo-700 shadow-sm">
+                  <Sparkles size={14} className="shrink-0 animate-spin text-indigo-600" />
+                  <span>{aiStatusStage || 'Searching the BUO catalog…'}</span>
+                </div>
+              )}
             </div>
-            <button onClick={() => setGuestOrder(null)} aria-label="Dismiss order confirmation" className="rounded-lg bg-zinc-100 p-2 text-zinc-600 transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
-              <X size={14} />
-            </button>
-          </div>
-          <p className="mt-3 text-sm leading-6 text-zinc-600">
-            {guestOrder.mode === 'DEMO_PREVIEW'
-              ? 'DEMO preview only. No server-side order or payment was created.'
-              : 'DEMO payment mode: no money was collected. The order is saved as pending until payment is integrated.'}
-          </p>
-          <div className="mt-4 flex items-center justify-between rounded-xl bg-zinc-100 p-3 text-sm">
-            <span>Status</span>
-            <span className="rounded-lg bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-800">{guestOrder.status}</span>
-          </div>
-        </div>
-      )}
+
+            <div className="border-t border-zinc-200/80 p-3 bg-white/40">
+              <div className="mb-3 flex flex-wrap gap-2">
+                {['Budget phone under ₦500,000', 'Smart TV for my apartment', 'Best laptop for work'].map((prompt) => (
+                  <button key={prompt} onClick={() => setAiInput(prompt)} className="min-h-8 rounded-lg bg-zinc-100/90 px-2.5 py-1 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 active:scale-95">
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={aiInput}
+                  onChange={(event) => setAiInput(event.target.value)}
+                  onKeyDown={(event) => event.key === 'Enter' && sendAiPrompt()}
+                  placeholder="Ask BUO AI..."
+                  className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white/90 px-3 py-2 text-sm outline-none transition placeholder:text-zinc-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10"
+                />
+                <button onClick={sendAiPrompt} disabled={aiLoading} className="min-h-10 rounded-xl bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+                  Send
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {guestOrder && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
+            className="fixed bottom-4 left-4 right-4 z-50 max-w-md rounded-2xl border border-zinc-200 bg-white p-5 text-zinc-900 shadow-2xl sm:bottom-6 sm:left-6 sm:right-auto"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600">Order placed</p>
+                <h4 className="mt-2 text-xl font-semibold">{guestOrder.id}</h4>
+              </div>
+              <button onClick={() => setGuestOrder(null)} aria-label="Dismiss order confirmation" className="rounded-lg bg-zinc-100 p-2 text-zinc-600 transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+                <X size={14} />
+              </button>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-zinc-600">
+              {guestOrder.mode === 'DEMO_PREVIEW'
+                ? 'DEMO preview only. No server-side order or payment was created.'
+                : 'DEMO payment mode: no money was collected. The order is saved as pending until payment is integrated.'}
+            </p>
+            <div className="mt-4 flex items-center justify-between rounded-xl bg-zinc-100 p-3 text-sm">
+              <span>Status</span>
+              <span className="rounded-lg bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-800">{guestOrder.status}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
